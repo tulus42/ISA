@@ -28,6 +28,8 @@ class Arguments {
                         optR = true;
                     else
                         err(ERR_ARGUMENTS);
+                    
+                    std::cout << "Recurion desired \n";
                 }        
 
                 // -x
@@ -36,6 +38,8 @@ class Arguments {
                         optX = true;
                     else
                         err(ERR_ARGUMENTS);
+
+                    std::cout << "Reverse ON\n";
                 } 
 
                 // -6
@@ -44,6 +48,8 @@ class Arguments {
                         opt6 = true;
                     else
                         err(ERR_ARGUMENTS);
+
+                    std::cout << "IPv6 - AAAA \n";
                 } 
 
                 // -p   PORT
@@ -71,7 +77,7 @@ class Arguments {
                     if (optServer == false)
                         optServer = true;
                     else
-                        err(ERR_ARGUMENTS);
+                        err(ERR_ARGUMENTS_SERVER);
 
                     i++;
                     // TODO
@@ -79,10 +85,13 @@ class Arguments {
                     optServerIP = lookup_host(argv[i]);
 
                     if (optServerIP.ipv4 == "" && optServerIP.ipv6 == "")
-                        err(ERR_ARGUMENTS);
+                        err(ERR_ARGUMENTS_SERVER);
 
                     if (optServerIP.ipv6 != "")
                         optServerValue = optServerIP.ipv6;
+                    else
+                        optServerValue = optServerIP.ipv4;
+                    
 
                     std::cout << "IPv4: " << optServerIP.ipv4 << "\n";
                     std::cout << "IPv6: " << optServerIP.ipv6 << "\n";
@@ -93,6 +102,7 @@ class Arguments {
                 // address
                 else if (optAddress == false) {
                     optAddress = true;
+                    optAddressValue = argv[i];
                 }
 
                 else {
@@ -100,6 +110,9 @@ class Arguments {
                 }
 
             }
+
+            if (optServer == false || optAddress == false)
+                err(ERR_ARGUMENTS_MISSING_REQUIRED);
         }
 };
 
@@ -107,7 +120,16 @@ class Arguments {
 void err(int err_code) {
     switch(err_code) {
         case ERR_ARGUMENTS:
-            std::cerr << "Invalid argumetns" << std::endl;
+            std::cerr << "Invalid argumetns." << std::endl;
+            break;
+
+        case ERR_ARGUMENTS_MISSING_REQUIRED:
+            std::cerr << "Missing required argument - Server or Address." << std::endl;
+            break;
+
+        case ERR_ARGUMENTS_SERVER:
+            std::cerr << "Invalid input Server name/ip address." << std::endl;
+            break;
             
     }
 

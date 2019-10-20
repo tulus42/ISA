@@ -11,6 +11,8 @@
 // error codes
 #define OK 0
 #define ERR_ARGUMENTS 1
+#define ERR_ARGUMENTS_MISSING_REQUIRED 2
+#define ERR_ARGUMENTS_SERVER 3
 
 
 struct IP46
