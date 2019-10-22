@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <random>
+#include <bitset>
 
 
 // error codes
@@ -19,11 +21,14 @@ struct IP46
 {
     std::string ipv4;
     std::string ipv6;
+    bool v6;            // true = ipv6 exists, false = only ipv4
 };
 
 
 
 
 void err(int err_code);
+void sendQuery(std::string domain, IP46 server, std::string Port, bool FlagR, bool FlagX, bool Flag6);
+std::string createHeader(std::string domain, IP46 server, std::string Port, bool FlagR, bool FlagX, bool Flag6);
 
 IP46 lookup_host (const char *host);
