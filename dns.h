@@ -8,6 +8,10 @@
 #include <arpa/inet.h>
 #include <random>
 #include <bitset>
+#include <regex>
+#include <netinet/in.h> 
+#include <sys/socket.h> 
+#include <sys/types.h> 
 
 
 // error codes
@@ -15,6 +19,7 @@
 #define ERR_ARGUMENTS 1
 #define ERR_ARGUMENTS_MISSING_REQUIRED 2
 #define ERR_ARGUMENTS_SERVER 3
+#define ERR_SOCKET 4
 
 
 struct IP46
@@ -29,6 +34,7 @@ struct IP46
 
 void err(int err_code);
 void sendQuery(std::string domain, IP46 server, std::string Port, bool FlagR, bool FlagX, bool Flag6);
-std::string createHeader(std::string domain, IP46 server, std::string Port, bool FlagR, bool FlagX, bool Flag6);
+std::string createHeader(bool FlagR);
+std::string createQuestion(std::string Domain, bool Flag6);
 
 IP46 lookup_host (const char *host);

@@ -78,7 +78,6 @@ public:
                     err(ERR_ARGUMENTS_SERVER);
 
                 i++;
-                // TODO
                 // check validity of server
                 optServerIP = lookup_host(argv[i]);
 
@@ -221,6 +220,106 @@ public:
    
 };
 
+/**
+ *                                   1  1  1  1  1  1
+ *     0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
+ *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+ *   |                                               |
+ *   /                     QNAME                     /
+ *   /                                               /
+ *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+ *   |                     QTYPE                     |
+ *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+ *   |                     QCLASS                    |
+ *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+ * */
+class DNSQuestion {
+public:
+    std::string QName = "";
+    std::string QType;      // 16 bits
+    std::string QClass;     // 16 bits
+
+    void getQName(std::string domain) {
+        // TODO
+        // cyklus cez adresu - číta písmená po bodku
+        // zapíše počet písmen a zaňho písmená
+
+        std::regex re("([.])");
+        std::sregex_iterator next(domain.begin(), domain.end(), re);
+        std::sregex_iterator end;
+        std::smatch match;
+
+        short lengthOfSubdomain;
+        std::string subdomainString;
+        
+        while (next != end) {
+            match = *next;
+            
+            // 8 bit length of subdomain
+            lengthOfSubdomain = match.prefix().length();
+            QName += std::bitset<8>(lengthOfSubdomain).to_string();     // 8 bits
+
+            // subdomain to binary
+            subdomainString = match.prefix();
+            
+            for (std::size_t i = 0; i < subdomainString.size(); ++i) {
+
+                std::cout << subdomainString[i] << ": " << std::bitset<8>(subdomainString[i]).to_string() << std::endl;
+                
+                QName += std::bitset<8>(subdomainString[i]).to_string();
+            }
+
+
+            std::cout << match.prefix() << "\n";
+            std::cout << QName << "\n";
+
+
+            next++;
+        } 
+
+        // if domain not ends with "." 
+        // -> handle last subdomain
+        if (match.suffix() != "") {
+            // 8 bit length of last subdomain
+            lengthOfSubdomain = match.suffix().length();
+            QName += std::bitset<8>(lengthOfSubdomain).to_string();     // 8 bits            
+
+            // last subdomain to binary
+            subdomainString = match.suffix();
+
+            for (std::size_t i = 0; i < subdomainString.size(); ++i) {
+            
+                std::cout << subdomainString[i] << ": " << std::bitset<8>(subdomainString[i]).to_string() << std::endl;
+                
+                QName += std::bitset<8>(subdomainString[i]).to_string();
+            }
+        }
+        std::cout << match.suffix() << "\n";
+
+        // add "." at the end of domain
+        QName += "00000000";
+
+        std::cout << QName << std::endl;
+    }
+
+    void getQType(bool IPv6) {
+        if (IPv6)
+            QType = "0000000000011100";     // 28
+        else
+            QType = "0000000000000001";     // 1
+    }
+
+    void getQClass() {
+        QClass = "0000000000000001";
+    }
+
+    std::string getFullQuestion() {
+        return(QName + QType + QClass);
+    }
+
+    
+};
+
 
 
 
@@ -278,23 +377,14 @@ IP46 lookup_host (const char *host) {
 }
 
 
-/**
- * @brief
- * 
- * */
-void sendQuery(std::string Domain, IP46 Server, std::string Port, bool FlagR, bool FlagX, bool Flag6) {
-    std::string dnsHeader = createHeader(Domain, Server, Port, FlagR, FlagX, Flag6);
 
-    std::cout << dnsHeader.substr(0, 16) << std::endl << dnsHeader.substr(16, 16) << std::endl << dnsHeader.substr(32, 16) << std::endl << dnsHeader.substr(48, 16) << std::endl << dnsHeader.substr(64, 16) << std::endl << dnsHeader.substr(80, 16) << std::endl;
-
-}
 
 
 /**
  * @brief
  *
  * */
-std::string createHeader(std::string domain, IP46 server, std::string Port, bool FlagR, bool FlagX, bool Flag6) {
+std::string createHeader(bool FlagR) {
     DNSHeader queryHeader;
     queryHeader.genDNSHeader();
     queryHeader.setQR("0");
@@ -311,7 +401,59 @@ std::string createHeader(std::string domain, IP46 server, std::string Port, bool
     return(queryHeader.getFullHeader());
 }
 
+std::string createQuestion(std::string Domain, bool Flag6) {
+    DNSQuestion queryQuestion;
+    queryQuestion.getQName(Domain);
+    queryQuestion.getQType(Flag6);
+    queryQuestion.getQClass();
 
+    return(queryQuestion.getFullQuestion());
+
+}
+
+
+/**
+ * @brief
+ * 
+ * */
+void sendQuery(std::string Domain, IP46 Server, std::string Port, bool FlagR, bool FlagX, bool Flag6) {
+    std::string dnsHeader = createHeader(FlagR);
+
+    std::cout << dnsHeader.substr(0, 16) << std::endl << dnsHeader.substr(16, 16) << std::endl << dnsHeader.substr(32, 16) << std::endl << dnsHeader.substr(48, 16) << std::endl << dnsHeader.substr(64, 16) << std::endl << dnsHeader.substr(80, 16) << std::endl;
+
+    std::string dnsQuestion = createQuestion(Domain, Flag6);
+
+    std::string dnsMessage = dnsHeader + dnsQuestion;
+
+
+    // sendig UDP query
+    int sockQuery;
+    struct sockaddr_in     servaddr; 
+
+    // Source: https://www.geeksforgeeks.org/udp-server-client-implementation-c/
+    // Creating socket file descriptor 
+    if ( (sockQuery = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0 ) { 
+        perror("socket creation failed"); 
+        err(ERR_SOCKET); 
+    } 
+
+    memset(&servaddr, 0, sizeof(servaddr)); 
+    
+    // Filling server information 
+    servaddr.sin_family = AF_INET; 
+    servaddr.sin_port = htons(std::stoi(Port)); 
+    // store this IP address in serveraddr:
+    inet_pton(AF_INET, (Server.v6 ? Server.ipv6 : Server.ipv4).c_str(), &(servaddr.sin_addr));
+
+    // send socket
+    int n, len; 
+      
+    sendto(sockQuery, dnsMessage.c_str(), dnsMessage.length(), 
+        MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
+            sizeof(servaddr)); 
+
+
+}
 
 void err(int err_code) {
     switch(err_code) {
@@ -326,6 +468,10 @@ void err(int err_code) {
         case ERR_ARGUMENTS_SERVER:
             std::cerr << "Invalid input Server name/ip address." << std::endl;
             break;
+
+        case ERR_SOCKET:
+            std::cerr << "Error in socket" << std::endl;
+            break;
             
     }
 
@@ -339,8 +485,10 @@ int main(int argc, char **argv){
     inputArgs.handle_arguments(argc, argv);
 
     sendQuery(inputArgs.optAddressValue, inputArgs.optServerIP, inputArgs.optPortValue, inputArgs.optR, inputArgs.optX, inputArgs.opt6);
+    
 
-
+    // sock = sock(AF_INET, SOCK_DGRAM, IPROTO_UDP)
+    // sendto()
 
     return(0);
 }
