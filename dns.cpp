@@ -382,9 +382,9 @@ void sendQuery(bufferClass* bufferPtr,std::string Domain, IP46 Server, short Por
         
 
         // send socket
-        int n, len; 
+        int len = bufferPtr->endOfBuffer - bufferPtr->buffer;
         
-        sendto(sockQuery, /*dnsMessage.c_str(), dnsMessage.length()*/"ahoj",4, 
+        sendto(sockQuery, bufferPtr->buffer, len, 
             MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
                 sizeof(servaddr)); 
     }
