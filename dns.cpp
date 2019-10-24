@@ -1,5 +1,27 @@
 #include "dns.h"
 
+class bufferClass {
+public:
+    unsigned char buffer[512];
+    unsigned char* endOfBuffer = &buffer[0];
+    
+    void addCh(char val) {
+        *endOfBuffer++ = val;
+    }
+
+    void addS(char* val) {
+        for (unsigned int i = 0; i < strlen(val); i++) {
+            *endOfBuffer++ = val[i];
+        }
+    }
+
+    void addShort(short val) {
+        *endOfBuffer = htons(val);
+        endOfBuffer += 2;
+    }
+};
+
+
 
 class Arguments {
 public:
@@ -7,10 +29,10 @@ public:
     bool optX = false;
     bool opt6 = false;
     bool optP = false;
-    std::string optPortValue = "53";
-    bool optServer = false;
+    short optPortValue = 53;
+    bool optS = false;
     IP46 optServerIP;
-    bool optAddress = false;
+    bool optA = false;
     std::string optAddressValue;
 
 
@@ -67,13 +89,14 @@ public:
                     err(ERR_ARGUMENTS);
 
                 std::cout << "Port: " << argv[i] << std::endl;
-                optPortValue = argv[i];
+
+                optPortValue = (short)(std::stoi(argv[i]));
             } 
 
             // -s   SERVER
             else if (std::string(argv[i]) == "-s") {
-                if (optServer == false)
-                    optServer = true;
+                if (optS == false)
+                    optS = true;
                 else
                     err(ERR_ARGUMENTS_SERVER);
 
@@ -95,8 +118,8 @@ public:
             } 
 
             // address
-            else if (optAddress == false) {
-                optAddress = true;
+            else if (optA == false) {
+                optA = true;
                 optAddressValue = argv[i];
             }
 
@@ -106,174 +129,69 @@ public:
 
         }
 
-        if (optServer == false || optAddress == false)
+        if (optS == false || optA == false)
             err(ERR_ARGUMENTS_MISSING_REQUIRED);
     }
 };
 
 
-
-/**
- *  * The header contains the following fields:
- *
- *                                   1  1  1  1  1  1
- *     0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
- *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- *   |                      ID                       |
- *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- *   |QR|   Opcode  |AA|TC|RD|RA|   Z    |   RCODE   |
- *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- *   |                    QDCOUNT                    |
- *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- *   |                    ANCOUNT                    |
- *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- *   |                    NSCOUNT                    |
- *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- *   |                    ARCOUNT                    |
- *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- * */
-class DNSHeader {
+class Header {
 public:
-    std::string ID;
-    std::string QR;
-    std::string Opcode = "0000";        // use only standard query
-    std::string AA;
-    std::string TC;
-    std::string RD;
-    std::string RA;
-    std::string Z = "000";
-    std::string Rcode;
-    std::string QDCOUNT;
-    std::string ANCOUNT;
-    std::string NSCOUNT;
-    std::string ARCOUNT;
+    unsigned short *dnsHeader;
+    unsigned short headerID;
 
-    void genDNSHeader() {
+    Header(bufferClass* buffer) {
+        // map header to buffer
+        dnsHeader = (unsigned short*)&buffer[0];
+
         // generate ID
         srand((unsigned int)time(NULL));
 
-        std::string newID;
-        for (int i = 0; i < 16; i++) {
-            newID.append(std::to_string(rand() % 2));
-        }
+        headerID = rand() % 65536;
 
-        ID = newID;
-        
-        std::cout<< "ID: " << ID << std::endl;
-    }
+        dnsHeader[0] = headerID;
+        dnsHeader[1] = 0;
+        dnsHeader[2] = htons(1);
+        dnsHeader[3] = 0;
+        dnsHeader[4] = 0;
+        dnsHeader[5] = 0;
 
-    // 1 bit
-    void setQR(std::string value) {
-        // 0 = query, 1 = answer
-        QR = value;
+        buffer->endOfBuffer += 12;
     }
 
-    // 1 bit
-    void setAA(std::string value) {
-        AA = value;
+    void RFlag(bool flagR) {
+        if (flagR)
+            dnsHeader[1] = htons(0x0100);
     }
-
-    // 1 bit
-    void setTC(std::string value) {
-        TC = value;
-    }
-    
-    // 1 bit
-    void setRD(std::string value) {
-        RD = value;
-    }
-
-    // 1 bit
-    void setRA(std::string value) {
-        RA = value;
-    }
-
-    // 4 bits
-    void setRcode(std::string value) {
-        Rcode = value;
-    }
-
-    // 16 bits
-    void setQDCOUNT(int value) {
-        QDCOUNT = std::bitset<16>(value).to_string(); //to binary
-    }
-
-    // 16 bits
-    void setANCOUNT(int value) {
-        ANCOUNT = std::bitset<16>(value).to_string(); //to binary
-    }
-
-    // 16 bits
-    void setNSCOUNT(int value) {
-        NSCOUNT = std::bitset<16>(value).to_string(); //to binary
-    }
-
-    // 16 bits
-    void setARCOUNT(int value) {
-        ARCOUNT = std::bitset<16>(value).to_string(); //to binary
-    }
-    
-    // returns full header
-    std::string getFullHeader() {
-        return(ID + QR + Opcode + AA + TC + RD + RA + Z + Rcode + QDCOUNT + ANCOUNT + NSCOUNT + ARCOUNT);
-    }
-   
 };
 
-/**
- *                                   1  1  1  1  1  1
- *     0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
- *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- *   |                                               |
- *   /                     QNAME                     /
- *   /                                               /
- *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- *   |                     QTYPE                     |
- *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- *   |                     QCLASS                    |
- *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- * */
-class DNSQuestion {
+
+class Question {
 public:
-    std::string QName = "";
-    std::string QType;      // 16 bits
-    std::string QClass;     // 16 bits
-
-    void getQName(std::string domain) {
-        // TODO
-        // cyklus cez adresu - číta písmená po bodku
-        // zapíše počet písmen a zaňho písmená
-
+    Question(bufferClass* buffer, std::string domain) {
         std::regex re("([.])");
         std::sregex_iterator next(domain.begin(), domain.end(), re);
         std::sregex_iterator end;
         std::smatch match;
 
-        short lengthOfSubdomain;
+        char lengthOfSubdomain;
         std::string subdomainString;
-        
+
         while (next != end) {
             match = *next;
             
             // 8 bit length of subdomain
             lengthOfSubdomain = match.prefix().length();
-            QName += std::bitset<8>(lengthOfSubdomain).to_string();     // 8 bits
+            buffer->addCh(lengthOfSubdomain);
 
             // subdomain to binary
             subdomainString = match.prefix();
             
             for (std::size_t i = 0; i < subdomainString.size(); ++i) {
+                buffer->addCh(subdomainString[i]);
 
                 std::cout << subdomainString[i] << ": " << std::bitset<8>(subdomainString[i]).to_string() << std::endl;
-                
-                QName += std::bitset<8>(subdomainString[i]).to_string();
             }
-
-
-            std::cout << match.prefix() << "\n";
-            std::cout << QName << "\n";
-
-
             next++;
         } 
 
@@ -282,45 +200,34 @@ public:
         if (match.suffix() != "") {
             // 8 bit length of last subdomain
             lengthOfSubdomain = match.suffix().length();
-            QName += std::bitset<8>(lengthOfSubdomain).to_string();     // 8 bits            
+            buffer->addCh(lengthOfSubdomain); 
 
             // last subdomain to binary
             subdomainString = match.suffix();
 
             for (std::size_t i = 0; i < subdomainString.size(); ++i) {
-            
+                buffer->addCh(subdomainString[i]);
+
                 std::cout << subdomainString[i] << ": " << std::bitset<8>(subdomainString[i]).to_string() << std::endl;
-                
-                QName += std::bitset<8>(subdomainString[i]).to_string();
             }
         }
-        std::cout << match.suffix() << "\n";
 
         // add "." at the end of domain
-        QName += "00000000";
-
-        std::cout << QName << std::endl;
+        buffer->addCh(0);
     }
 
-    void getQType(bool IPv6) {
-        if (IPv6)
-            QType = "0000000000011100";     // 28
-        else
-            QType = "0000000000000001";     // 1
-    }
+    void Qtype_QClass(bufferClass* buffer, bool IPv6) {
+        // QTYPE
+        if (IPv6) {
+            buffer->addShort(28);
+        } else {
+            buffer->addShort(1);
+        }
 
-    void getQClass() {
-        QClass = "0000000000000001";
+        // QCLASS
+        buffer->addShort(1);
     }
-
-    std::string getFullQuestion() {
-        return(QName + QType + QClass);
-    }
-
-    
 };
-
-
 
 
 /**
@@ -339,6 +246,8 @@ IP46 lookup_host (const char *host) {
 
   myIp.ipv4 = "";
   myIp.ipv6 = "";
+  myIp.v4 = false;
+  myIp.v6 = false;
 
   memset (&hints, 0, sizeof (hints));
   hints.ai_family = PF_UNSPEC;
@@ -366,10 +275,13 @@ IP46 lookup_host (const char *host) {
         }
       inet_ntop (res->ai_family, ptr, addrstr, 100);
       //printf ("IPv%d address: %s (%s)\n", res->ai_family == PF_INET6 ? 6 : 4, addrstr, res->ai_canonname);
-      if (res->ai_family == PF_INET6)
+      if (res->ai_family == PF_INET6) {
           myIp.ipv6 = addrstr;
-      else 
+          myIp.v6 = true;
+      } else {
           myIp.ipv4 = addrstr;
+          myIp.v4 = true;
+      }
       res = res->ai_next;
     }
 
@@ -377,84 +289,11 @@ IP46 lookup_host (const char *host) {
 }
 
 
-
-
-
 /**
- * @brief
- *
- * */
-std::string createHeader(bool FlagR) {
-    DNSHeader queryHeader;
-    queryHeader.genDNSHeader();
-    queryHeader.setQR("0");
-    queryHeader.setAA("0");
-    queryHeader.setTC("0");
-    queryHeader.setRD(FlagR ? "1" : "0");
-    queryHeader.setRA("0");
-    queryHeader.setRcode("0000");
-    queryHeader.setQDCOUNT(1);
-    queryHeader.setANCOUNT(0);
-    queryHeader.setNSCOUNT(0);
-    queryHeader.setARCOUNT(0);
-
-    return(queryHeader.getFullHeader());
-}
-
-std::string createQuestion(std::string Domain, bool Flag6) {
-    DNSQuestion queryQuestion;
-    queryQuestion.getQName(Domain);
-    queryQuestion.getQType(Flag6);
-    queryQuestion.getQClass();
-
-    return(queryQuestion.getFullQuestion());
-
-}
-
-
-/**
- * @brief
+ * @brief function for write error message to stderr and exit with exit code from parameter
  * 
+ * @param err_code
  * */
-void sendQuery(std::string Domain, IP46 Server, std::string Port, bool FlagR, bool FlagX, bool Flag6) {
-    std::string dnsHeader = createHeader(FlagR);
-
-    std::cout << dnsHeader.substr(0, 16) << std::endl << dnsHeader.substr(16, 16) << std::endl << dnsHeader.substr(32, 16) << std::endl << dnsHeader.substr(48, 16) << std::endl << dnsHeader.substr(64, 16) << std::endl << dnsHeader.substr(80, 16) << std::endl;
-
-    std::string dnsQuestion = createQuestion(Domain, Flag6);
-
-    std::string dnsMessage = dnsHeader + dnsQuestion;
-
-
-    // sendig UDP query
-    int sockQuery;
-    struct sockaddr_in     servaddr; 
-
-    // Source: https://www.geeksforgeeks.org/udp-server-client-implementation-c/
-    // Creating socket file descriptor 
-    if ( (sockQuery = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0 ) { 
-        perror("socket creation failed"); 
-        err(ERR_SOCKET); 
-    } 
-
-    memset(&servaddr, 0, sizeof(servaddr)); 
-    
-    // Filling server information 
-    servaddr.sin_family = AF_INET; 
-    servaddr.sin_port = htons(std::stoi(Port)); 
-    // store this IP address in serveraddr:
-    inet_pton(AF_INET, (Server.v6 ? Server.ipv6 : Server.ipv4).c_str(), &(servaddr.sin_addr));
-
-    // send socket
-    int n, len; 
-      
-    sendto(sockQuery, dnsMessage.c_str(), dnsMessage.length(), 
-        MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
-            sizeof(servaddr)); 
-
-
-}
-
 void err(int err_code) {
     switch(err_code) {
         case ERR_ARGUMENTS:
@@ -479,16 +318,87 @@ void err(int err_code) {
 }
 
 
+/**
+ * @brief
+ * 
+ * */
+void sendQuery(bufferClass* bufferPtr,std::string Domain, IP46 Server, short Port, bool FlagR, bool FlagX, bool Flag6) {
+    Header dnsHeader(bufferPtr);
+    dnsHeader.RFlag(FlagR);
 
-int main(int argc, char **argv){
+    Question dnsQuestion(bufferPtr, Domain);
+    dnsQuestion.Qtype_QClass(bufferPtr, Flag6);
+
+    // sendig UDP query
+    int sockQuery;
+
+    if (!Server.v4) {
+        // IPv6 socket
+
+        struct sockaddr_in6 servaddr6;
+    
+        if ( (sockQuery = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP)) < 0 ) { 
+            perror("socket creation failed"); 
+            err(ERR_SOCKET); 
+        } 
+
+        memset(&servaddr6, 0, sizeof(servaddr6)); 
+        
+        // Filling server information 
+        servaddr6.sin6_family = AF_INET6; 
+        servaddr6.sin6_port = htons(Port); 
+        // store this IP address in serveraddr:
+        inet_pton(AF_INET6, Server.ipv6.c_str(), &servaddr6.sin6_addr);
+     
+        
+
+        // send socket
+        int n, len; 
+        
+        sendto(sockQuery, /*dnsMessage.c_str(), dnsMessage.length()*/"ahoj",4, 
+            MSG_CONFIRM, (const struct sockaddr *) &servaddr6,  
+                sizeof(servaddr6)); 
+        
+
+
+    } else {
+        // IPv4 socket
+
+        struct sockaddr_in servaddr; 
+        // Source: https://www.geeksforgeeks.org/udp-server-client-implementation-c/
+        // Creating socket file descriptor 
+        if ( (sockQuery = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0 ) { 
+            perror("socket creation failed"); 
+            err(ERR_SOCKET); 
+        } 
+
+        memset(&servaddr, 0, sizeof(servaddr)); 
+        
+        // Filling server information 
+        servaddr.sin_family = AF_INET; 
+        servaddr.sin_port = htons(Port); 
+        // store this IP address in serveraddr:
+        inet_pton(AF_INET, Server.ipv4.c_str(), &(servaddr.sin_addr));
+        
+
+        // send socket
+        int n, len; 
+        
+        sendto(sockQuery, /*dnsMessage.c_str(), dnsMessage.length()*/"ahoj",4, 
+            MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
+                sizeof(servaddr)); 
+    }
+}
+
+
+int main(int argc, char **argv) {
     Arguments inputArgs;
     inputArgs.handle_arguments(argc, argv);
 
-    sendQuery(inputArgs.optAddressValue, inputArgs.optServerIP, inputArgs.optPortValue, inputArgs.optR, inputArgs.optX, inputArgs.opt6);
-    
+    bufferClass buffer;
 
-    // sock = sock(AF_INET, SOCK_DGRAM, IPROTO_UDP)
-    // sendto()
+    sendQuery(&buffer, inputArgs.optAddressValue, inputArgs.optServerIP, inputArgs.optPortValue, inputArgs.optR, inputArgs.optX, inputArgs.opt6);
+    
 
     return(0);
 }

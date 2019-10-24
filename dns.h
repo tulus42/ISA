@@ -26,14 +26,19 @@ struct IP46
 {
     std::string ipv4;
     std::string ipv6;
-    bool v6;            // true = ipv6 exists, false = only ipv4
+    bool v4;
+    bool v6;            
+    
 };
 
 
-
+class bufferClass;
+class Arguments;
+class Header;
+class Question;
 
 void err(int err_code);
-void sendQuery(std::string domain, IP46 server, std::string Port, bool FlagR, bool FlagX, bool Flag6);
+void sendQuery(bufferClass* buffer, std::string domain, IP46 server, short Port, bool FlagR, bool FlagX, bool Flag6);
 std::string createHeader(bool FlagR);
 std::string createQuestion(std::string Domain, bool Flag6);
 

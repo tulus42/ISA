@@ -10,7 +10,9 @@ clean:
 	-rm dns
 	-rm test
 
-test:
+ctest:
 	-rm test
-	$(CC) $(CFLAGS) test.cpp -o test $(FLAGS) $(LDFLAGS)
-	./test
+
+test:
+	$(CC) -g $(CFLAGS) test.cpp -o test $(FLAGS) $(LDFLAGS)
+
