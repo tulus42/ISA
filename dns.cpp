@@ -5,6 +5,12 @@ public:
     unsigned char buffer[512];
     unsigned char* endOfBuffer = &buffer[0];
     
+    bufferClass() {
+        for (int i = 0; i < 256; i++) {
+            buffer[i] = 0;
+        }
+    }
+
     void addCh(char val) {
         *endOfBuffer++ = val;
     }
@@ -16,7 +22,8 @@ public:
     }
 
     void addShort(short val) {
-        *endOfBuffer = htons(val);
+        short * ptrBuffer = (short*)endOfBuffer;
+        *ptrBuffer = htons(val);
         endOfBuffer += 2;
     }
 };
