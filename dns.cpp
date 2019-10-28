@@ -26,6 +26,17 @@ public:
         *ptrBuffer = htons(val);
         endOfBuffer += 2;
     }
+
+    unsigned short getID() {
+        unsigned short* res = (unsigned short*)buffer;
+        return *res;
+    }
+
+    unsigned short getShort(unsigned char* ptr) {
+        unsigned short* res = (unsigned short*)ptr;
+        return ntohs(*res);
+    }
+
 };
 
 
@@ -242,7 +253,7 @@ public:
  * 
  * 
  * @source: https://gist.github.com/jirihnidek/bf7a2363e480491da72301b228b35d5d
- * @author: jirihnidek, xtulus00
+ * @author jirihnidek, xtulus00
  * */
 IP46 lookup_host (const char *host) {
   struct addrinfo hints, *res;
@@ -318,6 +329,10 @@ void err(int err_code) {
         case ERR_SOCKET:
             std::cerr << "Error in socket" << std::endl;
             break;
+
+        case ERR_RCVD_SOCKET:
+            std::cerr << "Error in received socket" << std::endl;
+            break;
             
     }
 
@@ -328,18 +343,23 @@ void err(int err_code) {
 /**
  * @brief
  * 
+ * 
+ * @source: https://www.geeksforgeeks.org/udp-server-client-implementation-c/
+ * @author amitds, xtulus00
  * */
-void sendQuery(bufferClass* bufferPtr,std::string Domain, IP46 Server, short Port, bool FlagR, bool FlagX, bool Flag6) {
+void sendQuery(bufferClass* bufferPtr, bufferClass* rcvBuffer, Arguments inputArgvs) {
     Header dnsHeader(bufferPtr);
-    dnsHeader.RFlag(FlagR);
+    dnsHeader.RFlag(inputArgvs.optR);
 
-    Question dnsQuestion(bufferPtr, Domain);
-    dnsQuestion.Qtype_QClass(bufferPtr, Flag6);
+    Question dnsQuestion(bufferPtr, inputArgvs.optAddressValue);
+    dnsQuestion.Qtype_QClass(bufferPtr, inputArgvs.opt6);
 
     // sendig UDP query
     int sockQuery;
+    int n;
+    int len = bufferPtr->endOfBuffer - bufferPtr->buffer;
 
-    if (!Server.v4) {
+    if (!inputArgvs.optServerIP.v4) {
         // IPv6 socket
 
         struct sockaddr_in6 servaddr6;
@@ -353,18 +373,21 @@ void sendQuery(bufferClass* bufferPtr,std::string Domain, IP46 Server, short Por
         
         // Filling server information 
         servaddr6.sin6_family = AF_INET6; 
-        servaddr6.sin6_port = htons(Port); 
+        servaddr6.sin6_port = htons(inputArgvs.optPortValue); 
         // store this IP address in serveraddr:
-        inet_pton(AF_INET6, Server.ipv6.c_str(), &servaddr6.sin6_addr);
+        inet_pton(AF_INET6, inputArgvs.optServerIP.ipv6.c_str(), &servaddr6.sin6_addr);
      
         
 
         // send socket
-        int n, len; 
         
         sendto(sockQuery, /*dnsMessage.c_str(), dnsMessage.length()*/"ahoj",4, 
             MSG_CONFIRM, (const struct sockaddr *) &servaddr6,  
                 sizeof(servaddr6)); 
+
+        n = recvfrom(sockQuery, (char *)rcvBuffer->buffer, MAXLINE,  
+                MSG_WAITALL, (struct sockaddr *) &servaddr6, 
+                (socklen_t*)&len); 
         
 
 
@@ -383,19 +406,145 @@ void sendQuery(bufferClass* bufferPtr,std::string Domain, IP46 Server, short Por
         
         // Filling server information 
         servaddr.sin_family = AF_INET; 
-        servaddr.sin_port = htons(Port); 
+        servaddr.sin_port = htons(inputArgvs.optPortValue); 
         // store this IP address in serveraddr:
-        inet_pton(AF_INET, Server.ipv4.c_str(), &(servaddr.sin_addr));
+        inet_pton(AF_INET, inputArgvs.optServerIP.ipv4.c_str(), &(servaddr.sin_addr));
         
 
         // send socket
-        int len = bufferPtr->endOfBuffer - bufferPtr->buffer;
+        
         
         sendto(sockQuery, bufferPtr->buffer, len, 
             MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
                 sizeof(servaddr)); 
+
+        n = recvfrom(sockQuery, (char *)rcvBuffer->buffer, MAXLINE,  
+                MSG_WAITALL, (struct sockaddr *) &servaddr, 
+                (socklen_t*)&len); 
     }
+
+
+    
+    rcvBuffer->buffer[n] = '\0';
+    rcvBuffer->endOfBuffer = &(rcvBuffer->buffer[n]);
+    printf("Server : %s\n", rcvBuffer->buffer); 
+  
+    close(sockQuery); 
 }
+
+
+void parseAnswer(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArgs) {
+    unsigned char* bufferPtr = &(rcvBuffer->buffer[0]);
+    DNSheaderParams hdr;
+
+    hdr = checkRcvdHeader(buffer, rcvBuffer, inputArgs);
+    
+    std::cout << "Questions: " << hdr.QDCount << std::endl;
+    std::cout << "Answers: " << hdr.ANCount << std::endl;
+    std::cout << "Authority: " << hdr.NSCount << std::endl;
+    std::cout << "Additional: " << hdr.ARCount << std::endl;
+
+
+}
+
+
+DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArgs) {
+    DNSheaderParams hdrParams;
+
+    unsigned char* bufferPtr = &(rcvBuffer->buffer[0]);
+
+    // check ID
+    if (buffer->getID() != rcvBuffer->getID()) {
+        err(ERR_RCVD_SOCKET);
+    } else {
+        bufferPtr += 2;
+    }
+
+    // check flags
+    //                                 1  1  1  1  1  1
+    //   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
+    // +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    // |QR|   Opcode  |AA|TC|RD|RA|   Z    |   RCODE   |
+    // +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    // | 1|   000x    | x| x| x| x|  000   |   0xxx    |
+
+    // check for 0
+    constexpr unsigned char mapTest1{ 0x70 };   // must be x000 xxxx 
+    constexpr unsigned char mapTest2{ 0x78 };   //         x000 0xxx 
+    if ((mapTest1 & *bufferPtr) != 0x00) {
+        err(ERR_RCVD_SOCKET);
+    }
+
+    if ((mapTest2 & *(bufferPtr + 1)) != 0x00) {
+        err(ERR_RCVD_SOCKET);
+    }
+
+
+    // check for 1
+    // QR must be set to 1
+    constexpr unsigned char QRflag{ 0x80 };     // 1xxx xxxx
+    if ((QRflag & *bufferPtr) != QRflag) {
+        err(ERR_RCVD_SOCKET);
+    }
+
+    // OPCODE
+    // if inverse
+    constexpr unsigned char REVERSEflag{ 0x10 };
+    if (inputArgs.optX) {
+        if ((REVERSEflag & *bufferPtr) != REVERSEflag) {    // xxxx 1xxx
+            err(ERR_RCVD_SOCKET);
+        }
+    } else {
+        if ((REVERSEflag & *bufferPtr) != 0x00) {           // xxxx 0xxx
+            err(ERR_RCVD_SOCKET);
+        }
+    }
+
+    // authoritative
+    constexpr unsigned char AAflag{ 0x04 };
+    if ((AAflag & *bufferPtr) == AAflag) {
+        std::cout << "Authoritative: Yes\n"; 
+    } else {
+        std::cout << "Authoritative: No\n";
+    }
+
+    // truncated
+    constexpr unsigned char TCflag{ 0x02 };
+    if ((AAflag & *bufferPtr) == AAflag) {
+        std::cout << "Truncated: Yes\n"; 
+    } else {
+        std::cout << "Truncated: No\n";
+    }
+
+    // recursion
+    constexpr unsigned char RDflag{ 0x01 };
+    if ((AAflag & *bufferPtr) == AAflag) {
+        std::cout << "Recursive: Yes\n"; 
+    } else {
+        std::cout << "Recursive: No\n";
+    }
+
+    bufferPtr += 2;
+
+    // QDCount
+    hdrParams.QDCount = rcvBuffer->getShort(bufferPtr);
+    bufferPtr += 2;
+
+    // ANCount
+    hdrParams.ANCount = rcvBuffer->getShort(bufferPtr);
+    bufferPtr += 2;
+
+    // NSCount
+    hdrParams.NSCount = rcvBuffer->getShort(bufferPtr);
+    bufferPtr += 2;
+
+    // ARCount
+    hdrParams.ARCount = rcvBuffer->getShort(bufferPtr);
+    bufferPtr += 2;
+    
+    return hdrParams;
+}
+
 
 
 int main(int argc, char **argv) {
@@ -403,9 +552,10 @@ int main(int argc, char **argv) {
     inputArgs.handle_arguments(argc, argv);
 
     bufferClass buffer;
+    bufferClass rcvBuffer;
 
-    sendQuery(&buffer, inputArgs.optAddressValue, inputArgs.optServerIP, inputArgs.optPortValue, inputArgs.optR, inputArgs.optX, inputArgs.opt6);
-    
+    sendQuery(&buffer, &rcvBuffer, inputArgs);
+    parseAnswer(&buffer, &rcvBuffer, inputArgs);
 
     return(0);
 }

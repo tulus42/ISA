@@ -20,15 +20,25 @@
 #define ERR_ARGUMENTS_MISSING_REQUIRED 2
 #define ERR_ARGUMENTS_SERVER 3
 #define ERR_SOCKET 4
+#define ERR_RCVD_SOCKET 5
+
+//
+#define MAXLINE 512
 
 
-struct IP46
-{
+struct IP46 {
     std::string ipv4;
     std::string ipv6;
     bool v4;
     bool v6;            
     
+};
+
+struct DNSheaderParams {
+    unsigned short QDCount;
+    unsigned short ANCount;
+    unsigned short NSCount;
+    unsigned short ARCount;
 };
 
 
@@ -38,7 +48,9 @@ class Header;
 class Question;
 
 void err(int err_code);
-void sendQuery(bufferClass* buffer, std::string domain, IP46 server, short Port, bool FlagR, bool FlagX, bool Flag6);
+void sendQuery(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArgvs);
+void parseAnswer(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArgvs);
+DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArgvs);
 std::string createHeader(bool FlagR);
 std::string createQuestion(std::string Domain, bool Flag6);
 
