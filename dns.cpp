@@ -1,3 +1,13 @@
+/**
+ * TODO 
+ * - skontrolovať format stderr
+ * - v prípade chyby v hlavičke (v RCode) navypisovať nič, len chybový výstup
+ * - "-6" a "-x" súčasne - zistiť, ako sa má správať
+ * 
+ * */
+
+
+
 #include "dns.h"
 
 class bufferClass {
@@ -98,9 +108,14 @@ public:
             if (length != 16)
                 err(ERR_RCVD_SOCKET);
 
-            for (int i = 0; i < 16; i++) {
+            for (int i = 0; i < 8; i++) {
                 unsigned short tmpRes = this->readShort(BuffPtr);
-                res += tmpRes;
+                std::stringstream tmpStream;
+                tmpStream << std::hex << tmpRes;
+                res += tmpStream.str();
+
+                if (i < 7)
+                    res += ":";
             }
             break;
 
@@ -115,9 +130,6 @@ public:
             break;
         }
         
-
-        
-
         return(res);
     }
 };
@@ -264,12 +276,38 @@ public:
         if (flagR)
             dnsHeader[1] = htons(0x0100);
     }
+
+    void XFlag(bool flagX) {
+        if (flagX)
+            dnsHeader[1] = dnsHeader[1] | htons(0x0800);
+    }
 };
 
 
 class Question {
 public:
-    Question(bufferClass* buffer, std::string domain) {
+    bool ipv6;
+    bool reverse;
+    std::string domain;
+    bufferClass* buffer;
+
+    Question(bufferClass* bufferPtr, Arguments argvs) {
+        ipv6 = argvs.opt6;
+        reverse = argvs.optX;
+        domain = argvs.optAddressValue;
+        buffer = bufferPtr;
+        
+        if (!reverse) {
+            this->addAddressToBuffer();
+        } else {
+            this->reverseQuery(buffer);
+        }
+
+        // add "." at the end of domain
+        buffer->addCh(0);
+    }
+
+    void addAddressToBuffer () {
         std::regex re("([.])");
         std::sregex_iterator next(domain.begin(), domain.end(), re);
         std::sregex_iterator end;
@@ -290,8 +328,6 @@ public:
             
             for (std::size_t i = 0; i < subdomainString.size(); ++i) {
                 buffer->addCh(subdomainString[i]);
-
-                std::cout << subdomainString[i] << ": " << std::bitset<8>(subdomainString[i]).to_string() << std::endl;
             }
             next++;
         } 
@@ -308,21 +344,72 @@ public:
 
             for (std::size_t i = 0; i < subdomainString.size(); ++i) {
                 buffer->addCh(subdomainString[i]);
-
-                std::cout << subdomainString[i] << ": " << std::bitset<8>(subdomainString[i]).to_string() << std::endl;
             }
         }
-
-        // add "." at the end of domain
-        buffer->addCh(0);
     }
 
-    void Qtype_QClass(bufferClass* buffer, bool IPv6) {
-        // QTYPE
-        if (IPv6) {
-            buffer->addShort(28);
+    void reverseQuery(bufferClass* buffer) {
+        // reverse IPv6 query - 0000:: -> some.domain.name
+        if (ipv6) {
+
+        // reverse IPv4 query - 123.456.789.1 -> some.domain.name
         } else {
-            buffer->addShort(1);
+            std::vector<int> ipv4Vector;
+            std::string tmpString = "";
+            int tmpInt;
+
+            for ( std::string::iterator i=domain.begin(); i!=domain.end(); ++i) {
+                if (*i == '.') {
+                    tmpInt = std::stoi(tmpString);
+
+                    if (std::to_string(tmpInt) != tmpString || tmpInt > 255)
+                        err(ERR_INPUT_DOMAIN);
+
+                    ipv4Vector.push_back(tmpInt);
+                    tmpString = "";
+                } else {
+                    tmpString += *i;
+                }
+            }
+
+            tmpInt = std::stoi(tmpString);
+
+            if (std::to_string(tmpInt) != tmpString || tmpInt > 255)
+                err(ERR_INPUT_DOMAIN);
+
+            ipv4Vector.push_back(tmpInt);
+
+            if (ipv4Vector.size() != 4)
+                err(ERR_INPUT_DOMAIN);
+
+            // make reverse ipv4 address
+            std::reverse(ipv4Vector.begin(),ipv4Vector.end()); 
+
+            // create full address xx4.xx3.xx2.xx1.in-addr.arpa.
+            domain = "";
+            for (int i = 0; i < 4; i++) {
+                domain += std::to_string(ipv4Vector[i]);
+                domain += '.';
+            }
+
+            domain += "in-addr.arpa.";
+
+            std::cout << "Reverse domain: " << domain << std::endl;
+
+            this->addAddressToBuffer();        
+        }
+    }
+
+    void Qtype_QClass(bufferClass* buffer) {
+        // QTYPE
+        if (reverse) {
+            buffer->addShort(12);
+        } else {
+            if (ipv6) {
+                buffer->addShort(28);
+            } else {
+                buffer->addShort(1);
+            }
         }
 
         // QCLASS
@@ -494,7 +581,30 @@ void err(int err_code) {
         case ERR_RCVD_SOCKET:
             std::cerr << "Error in received socket" << std::endl;
             break;
-            
+
+        case ERR_INPUT_DOMAIN:
+            std::cerr << "Error in insertet domain" << std::endl;
+            break;
+
+        case ERR_RCODE_1:
+            std::cerr << "Error - format error - The name server was unable to interpret query." << std::endl; 
+            break;
+
+        case ERR_RCODE_2:
+            std::cerr << "Error - server failure - The name server was unable to process this query due to a problem with the name server." << std::endl; 
+            break;
+
+        case ERR_RCODE_3:
+            std::cerr << "Error - name error - Domain name referenced in the query does not exist." << std::endl; 
+            break;
+
+        case ERR_RCODE_4:
+            std::cerr << "Error - not implemented - The name server does not support the requested kind of query." << std::endl; 
+            break;    
+
+        case ERR_RCODE_5:
+            std::cerr << "Error - refused - The name server refused to perform the specified operation for policy reasons." << std::endl; 
+            break;    
     }
 
     exit(err_code);
@@ -511,9 +621,10 @@ void err(int err_code) {
 void sendQuery(bufferClass* bufferPtr, bufferClass* rcvBuffer, Arguments inputArgvs) {
     Header dnsHeader(bufferPtr);
     dnsHeader.RFlag(inputArgvs.optR);
+    dnsHeader.XFlag(inputArgvs.optX);
 
-    Question dnsQuestion(bufferPtr, inputArgvs.optAddressValue);
-    dnsQuestion.Qtype_QClass(bufferPtr, inputArgvs.opt6);
+    Question dnsQuestion(bufferPtr, inputArgvs);
+    dnsQuestion.Qtype_QClass(bufferPtr);
 
     // sendig UDP query
     int sockQuery;
@@ -537,12 +648,10 @@ void sendQuery(bufferClass* bufferPtr, bufferClass* rcvBuffer, Arguments inputAr
         servaddr6.sin6_port = htons(inputArgvs.optPortValue); 
         // store this IP address in serveraddr:
         inet_pton(AF_INET6, inputArgvs.optServerIP.ipv6.c_str(), &servaddr6.sin6_addr);
-     
-        
 
         // send socket
         
-        sendto(sockQuery, /*dnsMessage.c_str(), dnsMessage.length()*/"ahoj",4, 
+        sendto(sockQuery, bufferPtr->buffer, len, 
             MSG_CONFIRM, (const struct sockaddr *) &servaddr6,  
                 sizeof(servaddr6)); 
 
@@ -570,10 +679,8 @@ void sendQuery(bufferClass* bufferPtr, bufferClass* rcvBuffer, Arguments inputAr
         servaddr.sin_port = htons(inputArgvs.optPortValue); 
         // store this IP address in serveraddr:
         inet_pton(AF_INET, inputArgvs.optServerIP.ipv4.c_str(), &(servaddr.sin_addr));
-        
-
+    
         // send socket
-        
         
         sendto(sockQuery, bufferPtr->buffer, len, 
             MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
@@ -615,8 +722,8 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
     // | 1|   000x    | x| x| x| x|  000   |   0xxx    |
 
     // check for 0
-    constexpr unsigned char mapTest1{ 0x70 };   // must be x000 xxxx 
-    constexpr unsigned char mapTest2{ 0x78 };   //         x000 0xxx 
+    constexpr unsigned char mapTest1{ 0x70 };   // must be x000 xxxx ____ ____ 
+    constexpr unsigned char mapTest2{ 0x78 };   //         ____ ____ x000 0xxx 
     if ((mapTest1 & *bufferPtr) != 0x00) {
         err(ERR_RCVD_SOCKET);
     }
@@ -634,14 +741,15 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
     }
 
     // OPCODE
+    constexpr unsigned char REVERSEflag{ 0x08 };
     // if inverse
-    constexpr unsigned char REVERSEflag{ 0x10 };
     if (inputArgs.optX) {
         if ((REVERSEflag & *bufferPtr) != REVERSEflag) {    // xxxx 1xxx
             err(ERR_RCVD_SOCKET);
         }
+    // if standard query
     } else {
-        if ((REVERSEflag & *bufferPtr) != 0x00) {           // xxxx 0xxx
+        if ((0x00 & *bufferPtr) != 0x00) {           // xxxx 0xxx
             err(ERR_RCVD_SOCKET);
         }
     }
@@ -667,7 +775,7 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
     if ((RDflag & *bufferPtr++) == RDflag) {
 
         constexpr unsigned char RAflag{ 0x80 };
-        if ((RAflag & *bufferPtr++) == RAflag) {
+        if ((RAflag & *bufferPtr) == RAflag) {
             std::cout << "Recursive: Yes\n";
         } else {
             std::cout << "Recursive: No\n";
@@ -675,8 +783,42 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
         
     } else {
         std::cout << "Recursive: No\n";
-        bufferPtr++;
+        bufferPtr;
     }
+
+    // return code
+    if ((0x05 & *bufferPtr) == 0x05) {
+        err(ERR_RCODE_2);
+    }
+
+    if ((0x04 & *bufferPtr) == 0x04) {
+        err(ERR_RCODE_4);
+    }
+
+    if ((0x03 & *bufferPtr) == 0x03) {
+        err(ERR_RCODE_3);
+    }
+
+    if ((0x02 & *bufferPtr) == 0x02) {
+        err(ERR_RCODE_2);
+    }
+
+    if ((0x01 & *bufferPtr++) == 0x01) {
+        err(ERR_RCODE_1);
+    }
+
+    
+
+    
+
+    
+
+    
+
+    
+        
+        
+    
 
     // QDCount
     hdrParams.QDCount = rcvBuffer->readShort(&bufferPtr);
@@ -715,11 +857,8 @@ void readAnswer(bufferClass* rcvBuffer, unsigned char** bufferPtr) {
     rLength = rcvBuffer->readShort(bufferPtr);
 
     
-
     // read RData
     std::cout << rcvBuffer->readRData(bufferPtr, typeOfAnswer, rLength) << std::endl;
-    
-    
 }
 
 

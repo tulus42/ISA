@@ -21,6 +21,13 @@
 #define ERR_ARGUMENTS_SERVER 3
 #define ERR_SOCKET 4
 #define ERR_RCVD_SOCKET 5
+#define ERR_INPUT_DOMAIN 6
+#define ERR_RCODE_1 11
+#define ERR_RCODE_2 12
+#define ERR_RCODE_3 13
+#define ERR_RCODE_4 14
+#define ERR_RCODE_5 15
+
 
 //
 #define MAXLINE 512
