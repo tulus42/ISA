@@ -8,3 +8,5 @@ test.cpp
 *.json
 
 test
+
+*.pcapng

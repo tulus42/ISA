@@ -121,9 +121,12 @@ public:
 
         case CNAME:
             res = this->readAddress(BuffPtr);
-
             break;
             
+        case PTR:
+            res = this->readAddress(BuffPtr);
+            break;
+
         default:
             res = "unknown";
             *BuffPtr += length;
@@ -275,11 +278,6 @@ public:
     void RFlag(bool flagR) {
         if (flagR)
             dnsHeader[1] = htons(0x0100);
-    }
-
-    void XFlag(bool flagX) {
-        if (flagX)
-            dnsHeader[1] = dnsHeader[1] | htons(0x0800);
     }
 };
 
@@ -621,7 +619,6 @@ void err(int err_code) {
 void sendQuery(bufferClass* bufferPtr, bufferClass* rcvBuffer, Arguments inputArgvs) {
     Header dnsHeader(bufferPtr);
     dnsHeader.RFlag(inputArgvs.optR);
-    dnsHeader.XFlag(inputArgvs.optX);
 
     Question dnsQuestion(bufferPtr, inputArgvs);
     dnsQuestion.Qtype_QClass(bufferPtr);
@@ -740,16 +737,18 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
         err(ERR_RCVD_SOCKET);
     }
 
+
+    // TODO skontrolovať, či nemá pri inverznom byť 0x08
     // OPCODE
-    constexpr unsigned char REVERSEflag{ 0x08 };
+    constexpr unsigned char OPCFlag{ 0x00 };
     // if inverse
     if (inputArgs.optX) {
-        if ((REVERSEflag & *bufferPtr) != REVERSEflag) {    // xxxx 1xxx
+        if ((OPCFlag & *bufferPtr) != OPCFlag) {        // xxxx 1xxx
             err(ERR_RCVD_SOCKET);
         }
     // if standard query
     } else {
-        if ((0x00 & *bufferPtr) != 0x00) {           // xxxx 0xxx
+        if ((OPCFlag & *bufferPtr) != OPCFlag) {           // xxxx 0xxx
             err(ERR_RCVD_SOCKET);
         }
     }
@@ -809,17 +808,6 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
 
     
 
-    
-
-    
-
-    
-
-    
-        
-        
-    
-
     // QDCount
     hdrParams.QDCount = rcvBuffer->readShort(&bufferPtr);
 
@@ -856,7 +844,6 @@ void readAnswer(bufferClass* rcvBuffer, unsigned char** bufferPtr) {
     // read RLength
     rLength = rcvBuffer->readShort(bufferPtr);
 
-    
     // read RData
     std::cout << rcvBuffer->readRData(bufferPtr, typeOfAnswer, rLength) << std::endl;
 }
@@ -879,9 +866,9 @@ void parseAnswer(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArg
     // Question section
     std::cout << "Questions: " << ansDnsHdr.QDCount << std::endl;
     
-    std::cout << rcvBuffer->readAddress(&bufferPtr) << ", ";
-    std::cout << ((rcvBuffer->readShort(&bufferPtr) == 0x01) ? "A" : "AAAA") << ", ";
-    std::cout << ((rcvBuffer->readShort(&bufferPtr) == 0x01) ? "IN" : "unknown") << std::endl;
+    std::cout << rcvBuffer->readAddress(&bufferPtr) << ", ";        // address
+    getType(rcvBuffer->readShort(&bufferPtr));                      // type
+    std::cout << ((rcvBuffer->readShort(&bufferPtr) == 0x01) ? "IN" : "unknown") << std::endl;      // class
 
     // Answer section
     std::cout << "Answers: " << ansDnsHdr.ANCount << std::endl;
