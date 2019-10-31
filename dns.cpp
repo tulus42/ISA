@@ -38,6 +38,12 @@ public:
         return ntohs(*res);
     }
 
+    unsigned char readChar(unsigned char** ptr) {
+        unsigned char res = **ptr;
+        *ptr += 1;
+        return(res);
+    }
+
     std::string readAddress(unsigned char** BuffPtr) {
         std::string res = "";
                 
@@ -69,25 +75,50 @@ public:
         return(res);
     }
 
-    std::string readIP(unsigned char** BuffPtr, int ipV) {
-        if (ipV == 4) {
-            
+    std::string readRData(unsigned char** BuffPtr, DNSType typeOfAnswer, unsigned short length) {
+        std::string res = "";
+
+        // A
+        switch (typeOfAnswer)
+        {
+        case A:
+            if (length != 4) 
+                err(ERR_RCVD_SOCKET);
+
             for (int i = 0; i < 4; i++) {
-                
+                unsigned int tmpRes = this->readChar(BuffPtr);
+                res += std::to_string(tmpRes);
+                if (i != 3) {
+                    res += ".";
+                }
             }
-            return("");
+            break;
 
+        case AAAA:
+            if (length != 16)
+                err(ERR_RCVD_SOCKET);
 
+            for (int i = 0; i < 16; i++) {
+                unsigned short tmpRes = this->readShort(BuffPtr);
+                res += tmpRes;
+            }
+            break;
+
+        case CNAME:
+            res = this->readAddress(BuffPtr);
+
+            break;
             
-        } else
-        
-        if (ipV == 6) {
-            return("");
-
-        } else {
-            err(ERR_RCVD_SOCKET);
-            return("");
+        default:
+            res = "unknown";
+            *BuffPtr += length;
+            break;
         }
+        
+
+        
+
+        return(res);
     }
 };
 
@@ -359,17 +390,82 @@ IP46 lookup_host (const char *host) {
 }
 
 
-int getIPVersion(unsigned short ipVersion) {
-    if (ipVersion == 0x01) {
-        return(4);
-    } else if (ipVersion == 0x1c) {
-        return(6);
-    } else {
-        err(ERR_RCVD_SOCKET);
+DNSType getType(unsigned short tmpType) {
+    switch (tmpType)
+    {
+    case 0x01:
+        std::cout << "A, ";
+        return(A);
+    
+    case 0x02:
+        std::cout << "NS, ";
+        return(NS);
+
+    case 0x03:
+        std::cout << "MD, ";
+        return(MD);
+
+    case 0x04:
+        std::cout << "MF, ";
+        return(MF);
+
+    case 0x05:
+        std::cout << "CNAME, ";
+        return(CNAME);
+
+    case 0x06:
+        std::cout << "SOA, ";
+        return(SOA);
+
+    case 0x07:
+        std::cout << "MB, ";
+        return(MB);
+
+    case 0x08:
+        std::cout << "MG, ";
+        return(MG);
+
+    case 0x09:
+        std::cout << "MR, ";
+        return(MR);
+
+    case 0x0a:
+        std::cout << "NULL, ";
+        return(NULLdns);
+
+    case 0x0b:
+        std::cout << "WKS, ";
+        return(WKS);
+
+    case 0x0c:
+        std::cout << "PTR, ";
+        return(PTR);
+
+    case 0x0d:
+        std::cout << "HINFO, ";
+        return(HINFO);
+
+    case 0x0e:
+        std::cout << "MINFO, ";
+        return(MINFO);
+
+    case 0x0f:
+        std::cout << "MX, ";
+        return(MX);
+
+    case 0x10:
+        std::cout << "TXT, ";
+        return(TXT);
+
+    case 0x1c:
+        std::cout << "AAAA, ";
+        return(AAAA);
+
+
+    default:
+        std::cout << "unknown Type";
+        return(unknown);
     }
-
-    return(0);
-
 }
 
 /**
@@ -598,7 +694,39 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
 }
 
 
+/**
+ * @brief
+ * 
+ * */
+void readAnswer(bufferClass* rcvBuffer, unsigned char** bufferPtr) {
+    unsigned short rLength;
+    std::cout << rcvBuffer->readAddress(bufferPtr) << ", ";
 
+    // read TYPE
+    DNSType typeOfAnswer = getType(rcvBuffer->readShort(bufferPtr));
+
+    // read CLASS
+    std::cout << ((rcvBuffer->readShort(bufferPtr) == 0x01) ? "IN" : "unknown") << ", ";
+
+    // read TTL
+    *bufferPtr += 4;
+
+    // read RLength
+    rLength = rcvBuffer->readShort(bufferPtr);
+
+    
+
+    // read RData
+    std::cout << rcvBuffer->readRData(bufferPtr, typeOfAnswer, rLength) << std::endl;
+    
+    
+}
+
+
+/**
+ * @brief
+ * 
+ * */
 void parseAnswer(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArgs) {
     unsigned char* bufferPtr = &(rcvBuffer->buffer[0]);
     unsigned char* offsetBufferPtr = &(rcvBuffer->buffer[0]);
@@ -616,24 +744,23 @@ void parseAnswer(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArg
     std::cout << ((rcvBuffer->readShort(&bufferPtr) == 0x01) ? "A" : "AAAA") << ", ";
     std::cout << ((rcvBuffer->readShort(&bufferPtr) == 0x01) ? "IN" : "unknown") << std::endl;
 
-    // std::cout << "New Offset: " << bufferPtr - rcvBuffer->buffer << std::endl;
-
     // Answer section
     std::cout << "Answers: " << ansDnsHdr.ANCount << std::endl;
     for (int i = 0; i < ansDnsHdr.ANCount; i++) {
-        std::cout << rcvBuffer->readAddress(&bufferPtr) << ", ";
-
-        int ipV = getIPVersion(rcvBuffer->readShort(&bufferPtr));
-        std::cout << ((ipV == 4) ? "A" : "AAAA") << ", ";
-
-        std::cout << ((rcvBuffer->readShort(&bufferPtr) == 0x01) ? "IN" : "unknown") << ", ";
-        std::cout << rcvBuffer->readIP(&bufferPtr, ipV) << std::endl;
+        readAnswer(rcvBuffer, &bufferPtr);
     }
     
-
+    // Authority section
     std::cout << "Authority: " << ansDnsHdr.NSCount << std::endl;
-    std::cout << "Additional: " << ansDnsHdr.ARCount << std::endl;
+    for (int i = 0; i < ansDnsHdr.NSCount; i++) {
+        readAnswer(rcvBuffer, &bufferPtr);
+    }
 
+    // Additional section
+    std::cout << "Additional: " << ansDnsHdr.ARCount << std::endl;
+    for (int i = 0; i < ansDnsHdr.ARCount; i++) {
+        readAnswer(rcvBuffer, &bufferPtr);
+    }
 
 }
 

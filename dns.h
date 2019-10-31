@@ -25,6 +25,29 @@
 //
 #define MAXLINE 512
 
+enum DNSType {
+    A,
+    NS,
+    MD,
+    MF,
+    CNAME,
+    SOA,
+    MB,
+    MG,
+    MR,
+    NULLdns,
+    WKS,
+    PTR,
+    HINFO,
+    MINFO,
+    MX,
+    TXT,
+    AAAA,
+    unknown
+};
+
+
+
 
 struct IP46 {
     std::string ipv4;
