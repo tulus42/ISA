@@ -27,16 +27,68 @@ public:
         endOfBuffer += 2;
     }
 
-    unsigned short getID() {
+    unsigned short readID() {
         unsigned short* res = (unsigned short*)buffer;
         return *res;
     }
 
-    unsigned short getShort(unsigned char* ptr) {
-        unsigned short* res = (unsigned short*)ptr;
+    unsigned short readShort(unsigned char** ptr) {
+        unsigned short* res = (unsigned short*)*ptr;
+        *ptr += 2;
         return ntohs(*res);
     }
 
+    std::string readAddress(unsigned char** BuffPtr) {
+        std::string res = "";
+                
+        while (**BuffPtr != 0) {
+            // if compression by ptr
+            if ((0xc0 & (int)**BuffPtr) == 0xc0) {
+                **BuffPtr = 0x3f & (int)**BuffPtr;
+                unsigned short* compressionOffset = (unsigned short*)*BuffPtr;
+                *compressionOffset = ntohs(*compressionOffset);
+
+                unsigned char* tmpPtr = &(this->buffer[*compressionOffset]);
+                res += this->readAddress(&tmpPtr);
+
+                *BuffPtr += 2;
+                return(res);
+                
+            // if no compression
+            } else {
+                int subdomainCnt = (int)**BuffPtr;
+                *BuffPtr += 1;
+                for (int i = 0; i < subdomainCnt; i++) {
+                    res += **BuffPtr;
+                    *BuffPtr += 1;
+                }
+                res += '.';
+            }     
+        }
+        *BuffPtr += 1;  
+        return(res);
+    }
+
+    std::string readIP(unsigned char** BuffPtr, int ipV) {
+        if (ipV == 4) {
+            
+            for (int i = 0; i < 4; i++) {
+                
+            }
+            return("");
+
+
+            
+        } else
+        
+        if (ipV == 6) {
+            return("");
+
+        } else {
+            err(ERR_RCVD_SOCKET);
+            return("");
+        }
+    }
 };
 
 
@@ -307,6 +359,19 @@ IP46 lookup_host (const char *host) {
 }
 
 
+int getIPVersion(unsigned short ipVersion) {
+    if (ipVersion == 0x01) {
+        return(4);
+    } else if (ipVersion == 0x1c) {
+        return(6);
+    } else {
+        err(ERR_RCVD_SOCKET);
+    }
+
+    return(0);
+
+}
+
 /**
  * @brief function for write error message to stderr and exit with exit code from parameter
  * 
@@ -433,28 +498,13 @@ void sendQuery(bufferClass* bufferPtr, bufferClass* rcvBuffer, Arguments inputAr
 }
 
 
-void parseAnswer(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArgs) {
-    unsigned char* bufferPtr = &(rcvBuffer->buffer[0]);
-    DNSheaderParams hdr;
-
-    hdr = checkRcvdHeader(buffer, rcvBuffer, inputArgs);
-    
-    std::cout << "Questions: " << hdr.QDCount << std::endl;
-    std::cout << "Answers: " << hdr.ANCount << std::endl;
-    std::cout << "Authority: " << hdr.NSCount << std::endl;
-    std::cout << "Additional: " << hdr.ARCount << std::endl;
-
-
-}
-
-
 DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArgs) {
     DNSheaderParams hdrParams;
 
     unsigned char* bufferPtr = &(rcvBuffer->buffer[0]);
 
     // check ID
-    if (buffer->getID() != rcvBuffer->getID()) {
+    if (buffer->readID() != rcvBuffer->readID()) {
         err(ERR_RCVD_SOCKET);
     } else {
         bufferPtr += 2;
@@ -510,7 +560,7 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
 
     // truncated
     constexpr unsigned char TCflag{ 0x02 };
-    if ((AAflag & *bufferPtr) == AAflag) {
+    if ((TCflag & *bufferPtr) == TCflag) {
         std::cout << "Truncated: Yes\n"; 
     } else {
         std::cout << "Truncated: No\n";
@@ -518,34 +568,79 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
 
     // recursion
     constexpr unsigned char RDflag{ 0x01 };
-    if ((AAflag & *bufferPtr) == AAflag) {
-        std::cout << "Recursive: Yes\n"; 
+    if ((RDflag & *bufferPtr++) == RDflag) {
+
+        constexpr unsigned char RAflag{ 0x80 };
+        if ((RAflag & *bufferPtr++) == RAflag) {
+            std::cout << "Recursive: Yes\n";
+        } else {
+            std::cout << "Recursive: No\n";
+        }
+        
     } else {
         std::cout << "Recursive: No\n";
+        bufferPtr++;
     }
 
-    bufferPtr += 2;
-
     // QDCount
-    hdrParams.QDCount = rcvBuffer->getShort(bufferPtr);
-    bufferPtr += 2;
+    hdrParams.QDCount = rcvBuffer->readShort(&bufferPtr);
 
     // ANCount
-    hdrParams.ANCount = rcvBuffer->getShort(bufferPtr);
-    bufferPtr += 2;
+    hdrParams.ANCount = rcvBuffer->readShort(&bufferPtr);
 
     // NSCount
-    hdrParams.NSCount = rcvBuffer->getShort(bufferPtr);
-    bufferPtr += 2;
+    hdrParams.NSCount = rcvBuffer->readShort(&bufferPtr);
 
     // ARCount
-    hdrParams.ARCount = rcvBuffer->getShort(bufferPtr);
-    bufferPtr += 2;
+    hdrParams.ARCount = rcvBuffer->readShort(&bufferPtr);
     
     return hdrParams;
 }
 
 
+
+void parseAnswer(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArgs) {
+    unsigned char* bufferPtr = &(rcvBuffer->buffer[0]);
+    unsigned char* offsetBufferPtr = &(rcvBuffer->buffer[0]);
+    DNSheaderParams ansDnsHdr;
+
+    ansDnsHdr = checkRcvdHeader(buffer, rcvBuffer, inputArgs);
+
+    // move ptr after header
+    bufferPtr += 12;
+    
+    // Question section
+    std::cout << "Questions: " << ansDnsHdr.QDCount << std::endl;
+    
+    std::cout << rcvBuffer->readAddress(&bufferPtr) << ", ";
+    std::cout << ((rcvBuffer->readShort(&bufferPtr) == 0x01) ? "A" : "AAAA") << ", ";
+    std::cout << ((rcvBuffer->readShort(&bufferPtr) == 0x01) ? "IN" : "unknown") << std::endl;
+
+    // std::cout << "New Offset: " << bufferPtr - rcvBuffer->buffer << std::endl;
+
+    // Answer section
+    std::cout << "Answers: " << ansDnsHdr.ANCount << std::endl;
+    for (int i = 0; i < ansDnsHdr.ANCount; i++) {
+        std::cout << rcvBuffer->readAddress(&bufferPtr) << ", ";
+
+        int ipV = getIPVersion(rcvBuffer->readShort(&bufferPtr));
+        std::cout << ((ipV == 4) ? "A" : "AAAA") << ", ";
+
+        std::cout << ((rcvBuffer->readShort(&bufferPtr) == 0x01) ? "IN" : "unknown") << ", ";
+        std::cout << rcvBuffer->readIP(&bufferPtr, ipV) << std::endl;
+    }
+    
+
+    std::cout << "Authority: " << ansDnsHdr.NSCount << std::endl;
+    std::cout << "Additional: " << ansDnsHdr.ARCount << std::endl;
+
+
+}
+
+
+
+// int helpfulX = bufferPtr - rcvBuffer->buffer;
+// std::cout << "actual offset" << helpfulX << std::endl;
 
 int main(int argc, char **argv) {
     Arguments inputArgs;
