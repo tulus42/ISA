@@ -346,21 +346,80 @@ public:
         }
     }
 
+    std::vector<std::string> fillIPv6WithZeroes(std::vector<std::string> begin, std::vector<std::string> end) {
+        int emptyCnt = 32 - (begin.size() + end.size());
+        for (int i = 0; i < emptyCnt; i++) {
+            begin.push_back("0");
+        }
+        begin.insert(begin.end(), end.begin(), end.end());
+
+        return(begin);
+    }
+
     void reverseQuery(bufferClass* buffer) {
+        int tmpInt;
+        std::stringstream tmpStream;
+        std::string tmpString = "";
+
         // reverse IPv6 query - 0000:: -> some.domain.name
         if (ipv6) {
+            std::vector<std::string> v6begin;
+            std::vector<std::string> v6end;
+            bool shortFlag = false;
+
+            // TODO regex na ipv6
+
+            // loop for every char in domain from input
+            for (std::string::iterator i=domain.begin(); i != domain.end(); i++) {
+                if (*i == ':') {
+                    // ::
+                    if (*(i+1) == ':') {
+                        shortFlag = true;
+                        i++;
+
+                        // ::...
+                        if (i == domain.begin())
+                            continue;
+                    } 
+
+                    
+                    
+                } else {
+                    tmpStream << std::dec << (*i);
+
+                    // ::..xx:xx
+                    if (shortFlag) {
+                        v6end.push_back(tmpStream.str());
+                    // xx:xx..::
+                    } else {
+                        v6begin.push_back(tmpStream.str());
+                    }
+                    tmpStream.str("");
+                }
+            }
+            std::vector<std::string> fullV6Vector = this->fillIPv6WithZeroes(v6begin,v6end);
+
+            std::reverse(fullV6Vector.begin(),fullV6Vector.end()); 
+
+            domain = "";
+            for (int i = 0; i < 32; i++) {
+                domain += (fullV6Vector[i]);
+                domain += '.';
+            }
+
+            domain += "ip6.arpa.";
+
+
 
         // reverse IPv4 query - 123.456.789.1 -> some.domain.name
         } else {
             std::vector<int> ipv4Vector;
-            std::string tmpString = "";
-            int tmpInt;
 
             for ( std::string::iterator i=domain.begin(); i!=domain.end(); ++i) {
                 if (*i == '.') {
                     tmpInt = std::stoi(tmpString);
 
-                    if (std::to_string(tmpInt) != tmpString || tmpInt > 255)
+                    if (std::to_string(tmpInt) != tmpString || tmpInt > 255 || tmpInt < 0)
                         err(ERR_INPUT_DOMAIN);
 
                     ipv4Vector.push_back(tmpInt);
@@ -392,10 +451,9 @@ public:
 
             domain += "in-addr.arpa.";
 
-            std::cout << "Reverse domain: " << domain << std::endl;
-
-            this->addAddressToBuffer();        
+            std::cout << "Reverse domain: " << domain << std::endl;        
         }
+        this->addAddressToBuffer();
     }
 
     void Qtype_QClass(bufferClass* buffer) {
