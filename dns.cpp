@@ -2,7 +2,6 @@
  * TODO 
  * - skontrolovať format stderr
  * - v prípade chyby v hlavičke (v RCode) navypisovať nič, len chybový výstup
- * - "-6" a "-x" súčasne - zistiť, ako sa má správať
  * 
  * */
 
@@ -164,8 +163,6 @@ public:
                     optR = true;
                 else
                     err(ERR_ARGUMENTS);
-                
-                std::cout << "Recurion desired \n";
             }        
 
             // -x
@@ -174,8 +171,6 @@ public:
                     optX = true;
                 else
                     err(ERR_ARGUMENTS);
-
-                std::cout << "Reverse ON\n";
             } 
 
             // -6
@@ -184,8 +179,6 @@ public:
                     opt6 = true;
                 else
                     err(ERR_ARGUMENTS);
-
-                std::cout << "IPv6 - AAAA \n";
             } 
 
             // -p   PORT
@@ -203,8 +196,6 @@ public:
                     err(ERR_ARGUMENTS);
                 if (iPort > 65535)
                     err(ERR_ARGUMENTS);
-
-                std::cout << "Port: " << argv[i] << std::endl;
 
                 optPortValue = (short)(std::stoi(argv[i]));
             } 
@@ -226,11 +217,7 @@ public:
                 if (optServerIP.ipv6 != "")
                     optServerIP.v6 = true;
                 else
-                    optServerIP.v6 = false;
-                
-
-                std::cout << "IPv4: " << optServerIP.ipv4 << "\n";
-                std::cout << "IPv6: " << optServerIP.ipv6 << "\n";                        
+                    optServerIP.v6 = false;                      
             } 
 
             // address
@@ -290,10 +277,10 @@ public:
     bufferClass* buffer;
 
     Question(bufferClass* bufferPtr, Arguments argvs) {
-        ipv6 = argvs.opt6;
         reverse = argvs.optX;
         domain = argvs.optAddressValue;
         buffer = bufferPtr;
+        ipv6 = argvs.opt6;
         
         if (!reverse) {
             this->addAddressToBuffer();
@@ -360,21 +347,33 @@ public:
         int tmpInt;
         std::stringstream tmpStream;
         std::string tmpString = "";
+        bool reverseV6;
+
+        // IPv4
+        // source : http://ipregex.com/
+        if(std::regex_match(domain, std::regex("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])[.]){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$"))){
+            reverseV6 = false;
+        } // IPv6
+        // source : https://www.phpliveregex.com/learn/system-administration/how-to-match-ip-addresses/
+        else if(std::regex_match(domain, std::regex("(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])[.]){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])[.]){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))"))){
+            reverseV6 = true;
+        } else {
+            err(ERR_INPUT_DOMAIN);
+        }
+
 
         // reverse IPv6 query - 0000:: -> some.domain.name
-        if (ipv6) {
+        if (reverseV6) {
             std::vector<std::string> v6begin;
             std::vector<std::string> v6end;
-            bool shortFlag = false;
-
-            // TODO regex na ipv6
+            bool afterShortenFlag = false;
 
             // loop for every char in domain from input
             for (std::string::iterator i=domain.begin(); i != domain.end(); i++) {
                 if (*i == ':') {
                     // ::
                     if (*(i+1) == ':') {
-                        shortFlag = true;
+                        afterShortenFlag = true;
                         i++;
 
                         // ::...
@@ -388,7 +387,7 @@ public:
                     tmpStream << std::dec << (*i);
 
                     // ::..xx:xx
-                    if (shortFlag) {
+                    if (afterShortenFlag) {
                         v6end.push_back(tmpStream.str());
                     // xx:xx..::
                     } else {
@@ -449,9 +448,7 @@ public:
                 domain += '.';
             }
 
-            domain += "in-addr.arpa.";
-
-            std::cout << "Reverse domain: " << domain << std::endl;        
+            domain += "in-addr.arpa.";   
         }
         this->addAddressToBuffer();
     }
@@ -505,7 +502,6 @@ IP46 lookup_host (const char *host) {
       return myIp;
     }
 
-  printf ("Host: %s\n", host);
   while (res) {
       inet_ntop (res->ai_family, res->ai_addr->sa_data, addrstr, 100);
 
@@ -750,7 +746,6 @@ void sendQuery(bufferClass* bufferPtr, bufferClass* rcvBuffer, Arguments inputAr
     
     rcvBuffer->buffer[n] = '\0';
     rcvBuffer->endOfBuffer = &(rcvBuffer->buffer[n]);
-    printf("Server : %s\n", rcvBuffer->buffer); 
   
     close(sockQuery); 
 }
@@ -795,8 +790,6 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
         err(ERR_RCVD_SOCKET);
     }
 
-
-    // TODO skontrolovať, či nemá pri inverznom byť 0x08
     // OPCODE
     constexpr unsigned char OPCFlag{ 0x00 };
     // if inverse
@@ -814,17 +807,17 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
     // authoritative
     constexpr unsigned char AAflag{ 0x04 };
     if ((AAflag & *bufferPtr) == AAflag) {
-        std::cout << "Authoritative: Yes\n"; 
+        std::cout << "Authoritative: Yes, "; 
     } else {
-        std::cout << "Authoritative: No\n";
+        std::cout << "Authoritative: No, ";
     }
 
     // truncated
     constexpr unsigned char TCflag{ 0x02 };
     if ((TCflag & *bufferPtr) == TCflag) {
-        std::cout << "Truncated: Yes\n"; 
+        std::cout << "Truncated: Yes, "; 
     } else {
-        std::cout << "Truncated: No\n";
+        std::cout << "Truncated: No, ";
     }
 
     // recursion
@@ -833,13 +826,13 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
 
         constexpr unsigned char RAflag{ 0x80 };
         if ((RAflag & *bufferPtr) == RAflag) {
-            std::cout << "Recursive: Yes\n";
+            std::cout << "Recursive: Yes";
         } else {
-            std::cout << "Recursive: No\n";
+            std::cout << "Recursive: No";
         }
         
     } else {
-        std::cout << "Recursive: No\n";
+        std::cout << "Recursive: No";
         bufferPtr;
     }
 
@@ -863,6 +856,8 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
     if ((0x01 & *bufferPtr++) == 0x01) {
         err(ERR_RCODE_1);
     }
+
+    std::cout << std::endl;
 
     
 
@@ -888,7 +883,7 @@ DNSheaderParams checkRcvdHeader(bufferClass* buffer, bufferClass* rcvBuffer, Arg
  * */
 void readAnswer(bufferClass* rcvBuffer, unsigned char** bufferPtr) {
     unsigned short rLength;
-    std::cout << rcvBuffer->readAddress(bufferPtr) << ", ";
+    std::cout << "  " << rcvBuffer->readAddress(bufferPtr) << ", ";
 
     // read TYPE
     DNSType typeOfAnswer = getType(rcvBuffer->readShort(bufferPtr));
@@ -897,7 +892,9 @@ void readAnswer(bufferClass* rcvBuffer, unsigned char** bufferPtr) {
     std::cout << ((rcvBuffer->readShort(bufferPtr) == 0x01) ? "IN" : "unknown") << ", ";
 
     // read TTL
-    *bufferPtr += 4;
+    unsigned short ttl = rcvBuffer->readShort(bufferPtr) * 65536;
+    ttl += rcvBuffer->readShort(bufferPtr);
+    std::cout << ttl << ", ";
 
     // read RLength
     rLength = rcvBuffer->readShort(bufferPtr);
@@ -924,7 +921,7 @@ void parseAnswer(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArg
     // Question section
     std::cout << "Questions: " << ansDnsHdr.QDCount << std::endl;
     
-    std::cout << rcvBuffer->readAddress(&bufferPtr) << ", ";        // address
+    std::cout << "  " << rcvBuffer->readAddress(&bufferPtr) << ", ";        // address
     getType(rcvBuffer->readShort(&bufferPtr));                      // type
     std::cout << ((rcvBuffer->readShort(&bufferPtr) == 0x01) ? "IN" : "unknown") << std::endl;      // class
 
@@ -949,9 +946,6 @@ void parseAnswer(bufferClass* buffer, bufferClass* rcvBuffer, Arguments inputArg
 }
 
 
-
-// int helpfulX = bufferPtr - rcvBuffer->buffer;
-// std::cout << "actual offset" << helpfulX << std::endl;
 
 int main(int argc, char **argv) {
     Arguments inputArgs;
