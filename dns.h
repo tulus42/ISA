@@ -53,9 +53,6 @@ enum DNSType {
     unknown
 };
 
-
-
-
 struct IP46 {
     std::string ipv4;
     std::string ipv6;
