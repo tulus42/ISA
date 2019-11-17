@@ -723,7 +723,7 @@ DNSType getType(unsigned short tmpType) {
         return(MR);
 
     case 0x0a:
-        std::cout << "NULL, ";
+        std::cout << "NULLdns, ";
         return(NULLdns);
 
     case 0x0b:
