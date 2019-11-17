@@ -2,10 +2,6 @@
  * DNS resolver - ISA 2019, FIT VUT Brno
  * Adrián Tulušák, xtulus00
  * 
- * TODO 
- * - skontrolovať format stderr
- * - v prípade chyby v hlavičke (v RCode) navypisovať nič, len chybový výstup
- * 
  * */
 
 
