@@ -400,12 +400,20 @@ public:
         std::sregex_iterator next(domain.begin(), domain.end(), re);
         std::sregex_iterator end;
         std::smatch match;
+        std::string lastPart;
+        bool onePartDomain = true;
 
         char lengthOfSubdomain;
         std::string subdomainString;
 
+        if (domain == ".") {
+            return;
+        }
+
         // reads every subdomain in cycle 
         while (next != end) {
+            onePartDomain = false;
+
             match = *next;
             
             // 8 bit length of subdomain
@@ -422,15 +430,21 @@ public:
             next++;
         } 
 
+
+        if (onePartDomain) {
+            lastPart = domain;
+        } else {
+            lastPart = match.suffix();
+        }
         // if domain do not ends with "." 
         // -> handle last subdomain
-        if (match.suffix() != "") {
+        if (lastPart != "") {
             // 8 bit length of last subdomain
-            lengthOfSubdomain = match.suffix().length();
+            lengthOfSubdomain = lastPart.length();
             // adds length of subdomain to the buffer
             buffer->addCh(lengthOfSubdomain); 
 
-            subdomainString = match.suffix();
+            subdomainString = lastPart;
 
             // adds last subdomain to the buffer
             for (std::size_t i = 0; i < subdomainString.size(); ++i) {
@@ -787,6 +801,10 @@ void err(int err_code) {
             fprintf( stderr, "Error: Error in insertet domain\n");
             break;
 
+        case ERR_TIMEOUT:
+            fprintf( stderr, "Error: socket time out\n");
+            break;
+
         case ERR_RCODE_1:
             fprintf( stderr, "Error: format error - The name server was unable to interpret query.\n");
             break;
@@ -864,6 +882,13 @@ void sendQuery(bufferClass* bufferPtr, bufferClass* rcvBuffer, Arguments inputAr
             MSG_CONFIRM, (const struct sockaddr *) &servaddr6,  
                 sizeof(servaddr6)); 
 
+        // time out
+        struct pollfd pfd = {.fd = sockQuery, .events = POLLIN, {0}};
+
+        if (poll(&pfd, 1, 3000) == 0) {
+            err(ERR_TIMEOUT);
+        }
+
         n = recvfrom(sockQuery, (char *)rcvBuffer->buffer, MAXLINE,  
                 MSG_WAITALL, (struct sockaddr *) &servaddr6, 
                 (socklen_t*)&len); 
@@ -894,6 +919,13 @@ void sendQuery(bufferClass* bufferPtr, bufferClass* rcvBuffer, Arguments inputAr
         sendto(sockQuery, bufferPtr->buffer, len, 
             MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
                 sizeof(servaddr)); 
+
+        // time out
+        struct pollfd pfd = {.fd = sockQuery, .events = POLLIN, {0}};
+
+        if (poll(&pfd, 1, 3000) == 0) {
+            err(ERR_TIMEOUT);
+        }
 
         n = recvfrom(sockQuery, (char *)rcvBuffer->buffer, MAXLINE,  
                 MSG_WAITALL, (struct sockaddr *) &servaddr, 

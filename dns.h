@@ -12,16 +12,18 @@
 #include <netinet/in.h> 
 #include <sys/socket.h> 
 #include <sys/types.h> 
+#include <poll.h>
 
 
 // error codes
 #define OK 0
-#define ERR_ARGUMENTS 1 // Invalid argumetns
+#define ERR_ARGUMENTS 1                     // Invalid argumetns
 #define ERR_ARGUMENTS_MISSING_REQUIRED 2    // Missing required argument - Server or Address
 #define ERR_ARGUMENTS_SERVER 3              // Invalid input Server name/ip address
 #define ERR_SOCKET 4                        // Error in socket
 #define ERR_RCVD_SOCKET 5                   // Error in received socket
 #define ERR_INPUT_DOMAIN 6                  // Error in insertet domain
+#define ERR_TIMEOUT 7
 #define ERR_RCODE_1 11                      // format error - The name server was unable to interpret query
 #define ERR_RCODE_2 12                      // server failure - The name server was unable to process this query due to a problem with the name server
 #define ERR_RCODE_3 13                      // name error - Domain name referenced in the query does not exist

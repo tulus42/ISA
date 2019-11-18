@@ -76,7 +76,7 @@ function check_output_parse($program_output, $file_name) {
 ///////////////////////////////////////////////////////
 // PARSE TESTS
 ///////////////////////////////////////////////////////
-function run_all_parse_tests($exec_file) {
+function run_tests($exec_file) {
     $dir_path = $GLOBALS['directory_path']; 
 
     $GLOBALS['html_code'] .=  "        <h2 style=\"color: indigo\">DNS tests:</h2>";
@@ -133,29 +133,25 @@ function html_header() {
 function html_element($ret_val, $out_val, $source_file, $return_var) {
     if ($ret_val && ($return_var != 0)) {
         $GLOBALS['html_code'] .= "<h3 style=\"color:limegreen\">".$source_file."</h3>
-        <p style=\"margin-left: 60px; color:limegreen\">Returned value: CORRECT - non 0</p>
-        <p style=\"margin-left: 60px; color:limegreen\">Output value: NONE</p>";
+        <p style=\"margin-left: 60px; color:limegreen\">Returned value: CORRECT - non 0</p>";
 
         $GLOBALS['correct_test_counter'] += 1;
 
     } elseif ($ret_val) {
         if ($out_val) {
             $GLOBALS['html_code'] .= "<h3 style=\"color:limegreen\">".$source_file."</h3>
-            <p style=\"margin-left: 60px; color:limegreen\">Returned value: CORRECT</p>
-            <p style=\"margin-left: 60px; color:limegreen\">Output value: CORRECT</p>";
+            <p style=\"margin-left: 60px; color:limegreen\">Returned value: CORRECT</p>";
 
             $GLOBALS['correct_test_counter'] += 1;
             
         } else {
             $GLOBALS['html_code'] .= "<h3 style=\"color:red\">".$source_file."</h3>
-            <p style=\"margin-left: 60px; color:limegreen\">Returned value: CORRECT</p>
-            <p style=\"margin-left: 60px; color:red\">Output value: FAIL</p>";
+            <p style=\"margin-left: 60px; color:limegreen\">Returned value: CORRECT</p>";
         }
 
     } else {
         $GLOBALS['html_code'] .= "<h3 style=\"color:red\">".$source_file."</h3>
-        <p style=\"margin-left: 60px; color:red\">Returned value: FAIL - returned: ".$return_var."</p>
-        <p style=\"margin-left: 60px; color:red\">Output value: NONE</p>";
+        <p style=\"margin-left: 60px; color:red\">Returned value: FAIL - returned: ".$return_var."</p>";
     }
 
     $GLOBALS['test_counter'] += 1;
@@ -176,7 +172,7 @@ function end_html($string) {
 ///////////////////////////////////////////////////////
 // MAIN
 ///////////////////////////////////////////////////////
-$parse_file = "dns";
+$exec_file = "dns";
 
 $directory_path = "tests/";
 
@@ -186,7 +182,7 @@ $correct_test_counter = 0;
 
 $html_code = html_header();
 
-run_all_parse_tests($parse_file);
+run_tests($exec_file);
 
 
 end_html($html_code);

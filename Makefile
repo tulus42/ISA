@@ -8,11 +8,6 @@ all:
 
 clean:
 	-rm dns
-	-rm test
-
-ctest:
-	-rm test
 
 test:
-	$(CC) -g $(CFLAGS) test.cpp -o test $(FLAGS) $(LDFLAGS)
-
+	php test.php

@@ -1,0 +1,36 @@
+# ISA 2019
+# DNS resolver
+# Adrián Tulušák (xtulus00)
+
+# Popis programu
+Program dostane na vstup server, na ktorý bude posielaná požiadavka
+a adresu, ktorá bude obsahom tejto požiadavky. Program odošle
+DNS paket na zadaný server a následne spracuje odpoveď. Spracovanú
+odpoveď vypíše v prehľadnom formáte na štandardný výstup.
+
+# Preklad programu - vytvorenie spustiteľného súboru
+Preklad programu prebieha prostredníctvom CMake príkazom 'make'
+Prekladom sa vytvorí v aktuálnom adresári spustiteľný súbor 'dns'
+
+# Používanie programu
+Program sa spúšťa nasledovne:
+./dns [-r] [-x] [-6] -s server [-p port] adresa
+kde:
+[ ] znamená voliteľný parameter
+-r: požadovaná rekurzia
+-x: reverzná požiadavka - v prípade použitia reverznej požiadavky
+    je nutné napísať adresu vo formáte IP adresy (IPv4 alebo IPv6)
+    tento parameter má prednosť pred '-6'
+-6: požiadavka typu AAAA (namiesto implicitného A)
+    v prípade kombinácie s '-x' tento parameter nemá žiaden význam
+-s server: IP adresa alebo doménové meno serveru, kam bude požiadavka odosielaná
+-p port: číslo portu, na ktorý bude požiadavka odosielaná
+
+# Odovzdané súbory
+dns.cpp
+dns.h
+manual.pdf
+MakeFile
+README
+test.php
+tests/  - priečinok s testmi
